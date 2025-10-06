@@ -1,0 +1,39 @@
+pid logs/nginx.pid;
+error_log logs/error.log;
+
+events {
+  worker_connections 1024;
+}
+
+http {
+  default_type  application/octet-stream;
+  sendfile      on;
+  keepalive_timeout 65;
+
+  log_format proxy '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+  access_log logs/access.log proxy;
+
+  proxy_set_header Host              $host;
+  proxy_set_header X-Real-IP         $remote_addr;
+  proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+
+  __SUPABASE_PROXY_REST_BLOCK__
+
+  __SUPABASE_PROXY_STUDIO_BLOCK__
+
+  __SUPABASE_PROXY_MAILPIT_BLOCK__
+
+  server {
+    listen __SUPABASE_PROXY_LISTEN__:__SUPABASE_FRONTEND_PORT__;
+    listen [::]:__SUPABASE_FRONTEND_PORT__;
+    server_name _;
+
+    location / {
+      return 302 http://$host:3000$request_uri;
+    }
+  }
+}
