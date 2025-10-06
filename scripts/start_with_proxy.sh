@@ -26,7 +26,7 @@ fi
 
 if [[ -z "$EXTERNAL_HOST" ]]; then
   if [[ "$LISTEN_ADDR" == "0.0.0.0" ]]; then
-    EXTERNAL_HOST="127.0.0.1"
+    EXTERNAL_HOST="192.168.36.44"
   else
     EXTERNAL_HOST="$LISTEN_ADDR"
   fi
@@ -75,7 +75,7 @@ def build_block(port: int, label: str) -> str:
             f"    listen {listen_addr}:{port};\n"
             f"    server_name _;\n\n"
             f"    location / {{\n"
-            f"      proxy_pass http://127.0.0.1:{port};\n"
+            f"      proxy_pass http://192.168.36.44:{port};\n"
             f"    }}\n"
             f"  }}\n"
         )

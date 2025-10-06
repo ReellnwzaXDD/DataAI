@@ -157,9 +157,10 @@ export default function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
     setModels(modelData.models)
 
     setChatSettings({
-      model: (searchParams.get("model") ||
-        workspace?.default_model ||
-        "dataai") as LLMID,
+      // model: (searchParams.get("model") ||
+      //   workspace?.default_model ||
+      //   "dataai") as LLMID,
+      model: ("dataai") as LLMID,
       prompt:
         workspace?.default_prompt ||
         "You are a friendly, helpful AI assistant.",
