@@ -79,7 +79,7 @@ export const GlobalState: FC<GlobalStateProps> = ({ children }) => {
   const [chatSettings, setChatSettings] = useState<ChatSettings>({
     model: "dataai",
     prompt: "You are a helpful AI assistant.",
-    temperature: 0.5,
+    temperature: 0.2,
     contextLength: 4000,
     includeProfileContext: true,
     includeWorkspaceInstructions: true,

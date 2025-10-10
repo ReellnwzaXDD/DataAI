@@ -192,6 +192,16 @@ export const useChatHandler = () => {
     isRegeneration: boolean
   ) => {
     const startingInput = messageContent
+    // Allow file-only questions: if no text but files are selected and retrieval is on,
+    // synthesize a minimal query so the pipeline proceeds.
+    let finalMessageContent = messageContent
+    if (
+      (!finalMessageContent || finalMessageContent.trim().length === 0) &&
+      (newMessageFiles.length > 0 || chatFiles.length > 0) &&
+      useRetrieval
+    ) {
+      finalMessageContent = "Answer the question using the selected files. If no explicit question is given, summarize the most relevant information from the files."
+    }
 
     try {
       setUserInput("")
@@ -222,7 +232,7 @@ export const useChatHandler = () => {
         modelData,
         profile,
         selectedWorkspace,
-        messageContent
+        finalMessageContent
       )
 
       let currentChat = selectedChat ? { ...selectedChat } : null
@@ -231,14 +241,11 @@ export const useChatHandler = () => {
 
       let retrievedFileItems: Tables<"file_items">[] = []
 
-      if (
-        (newMessageFiles.length > 0 || chatFiles.length > 0) &&
-        useRetrieval
-      ) {
+      if ((newMessageFiles.length > 0 || chatFiles.length > 0) && useRetrieval) {
         setToolInUse("retrieval")
 
         retrievedFileItems = await handleRetrieval(
-          userInput,
+          finalMessageContent,
           newMessageFiles,
           chatFiles,
           chatSettings!.embeddingsProvider,
@@ -248,7 +255,7 @@ export const useChatHandler = () => {
 
       const { tempUserChatMessage, tempAssistantChatMessage } =
         createTempMessages(
-          messageContent,
+          finalMessageContent,
           chatMessages,
           chatSettings!,
           b64Images,
@@ -341,7 +348,7 @@ export const useChatHandler = () => {
           chatSettings!,
           profile!,
           selectedWorkspace!,
-          messageContent,
+          finalMessageContent,
           selectedAssistant!,
           newMessageFiles,
           setSelectedChat,
@@ -367,7 +374,7 @@ export const useChatHandler = () => {
         currentChat,
         profile!,
         modelData!,
-        messageContent,
+        finalMessageContent,
         generatedText,
         newMessageImages,
         isRegeneration,

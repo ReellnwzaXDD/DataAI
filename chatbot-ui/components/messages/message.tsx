@@ -17,6 +17,7 @@ import Image from "next/image"
 import { FC, useContext, useEffect, useRef, useState } from "react"
 import { ModelIcon } from "../models/model-icon"
 import { Button } from "../ui/button"
+import { getFileFromStorage } from "@/db/storage/files"
 import { FileIcon } from "../ui/file-icon"
 import { FilePreview } from "../ui/file-preview"
 import { TextareaAutosize } from "../ui/textarea-autosize"
@@ -29,6 +30,8 @@ const ICON_SIZE = 32
 interface MessageProps {
   message: Tables<"messages">
   fileItems: Tables<"file_items">[]
+  nextMessageFileItems?: Tables<"file_items">[]
+  headerFiles?: { id: string; name: string; type: string }[]
   isEditing: boolean
   isLast: boolean
   onStartEdit: (message: Tables<"messages">) => void
@@ -39,6 +42,8 @@ interface MessageProps {
 export const Message: FC<MessageProps> = ({
   message,
   fileItems,
+  nextMessageFileItems = [],
+  headerFiles,
   isEditing,
   isLast,
   onStartEdit,
@@ -179,6 +184,20 @@ export const Message: FC<MessageProps> = ({
     return acc
   }, fileAccumulator)
 
+  // Build summary for files attached via next assistant retrieval (for user message display)
+  const nextFileParentSummary = (() => {
+    if (message.role !== "user" || nextMessageFileItems.length === 0) return null
+    const acc: Record<string, { id: string; name: string; type: string; count: number }> = {}
+    nextMessageFileItems.forEach(fi => {
+      const parent = files.find(f => f.id === fi.file_id)
+      if (!parent) return
+      if (!acc[parent.id]) acc[parent.id] = { id: parent.id, name: parent.name, type: parent.type, count: 1 }
+      else acc[parent.id].count += 1
+    })
+    const parents = Object.values(acc)
+    return { files: parents, chunks: nextMessageFileItems.length }
+  })()
+
   return (
     <div
       className={cn(
@@ -253,16 +272,33 @@ export const Message: FC<MessageProps> = ({
                 />
               )}
 
-              <div className="font-semibold">
-                {message.role === "assistant"
-                  ? message.assistant_id
-                    ? assistants.find(
-                        assistant => assistant.id === message.assistant_id
-                      )?.name
-                    : selectedAssistant
-                      ? selectedAssistant?.name
-                      : MODEL_DATA?.modelName
-                  : profile?.display_name ?? profile?.username}
+              <div className="flex items-center space-x-2">
+                <div className="font-semibold">
+                  {message.role === "assistant"
+                    ? message.assistant_id
+                      ? assistants.find(
+                          assistant => assistant.id === message.assistant_id
+                        )?.name
+                      : selectedAssistant
+                        ? selectedAssistant?.name
+                        : MODEL_DATA?.modelName
+                    : profile?.display_name ?? profile?.username}
+                </div>
+                {message.role === "user" && (headerFiles?.length || nextFileParentSummary) && (
+                  <div className="flex items-center space-x-1 text-xs opacity-70">
+                    {(() => {
+                      const list = headerFiles && headerFiles.length > 0 ? headerFiles : (nextFileParentSummary?.files || [])
+                      if (list.length === 0) return null
+                      return (
+                        <>
+                          <FileIcon type={list[0].type} />
+                          <span className="max-w-[140px] truncate">{list[0].name}</span>
+                          {list.length > 1 && <span>+{list.length - 1}</span>}
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -307,6 +343,8 @@ export const Message: FC<MessageProps> = ({
           ) : (
             <MessageMarkdown content={message.content} />
           )}
+
+          {false && nextFileParentSummary}
         </div>
 
         {fileItems.length > 0 && (

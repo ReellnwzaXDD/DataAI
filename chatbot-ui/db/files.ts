@@ -101,15 +101,16 @@ export const createFile = async (
   } else {
     fileRecord.name = baseName + "." + extension
   }
-  const { data: createdFile, error } = await supabase
+  const { data, error } = await supabase
     .from("files")
     .insert([fileRecord])
     .select("*")
-    .single()
 
-  if (error) {
+  if (error || !data) {
     throw new Error(error.message)
   }
+
+  const createdFile = Array.isArray(data) ? data[0] : (data as any)
 
   await createFileWorkspace({
     user_id: createdFile.user_id,
@@ -161,15 +162,16 @@ export const createDocXFile = async (
   workspace_id: string,
   embeddingsProvider: "openai" | "local"
 ) => {
-  const { data: createdFile, error } = await supabase
+  const { data, error } = await supabase
     .from("files")
     .insert([fileRecord])
     .select("*")
-    .single()
 
-  if (error) {
+  if (error || !data) {
     throw new Error(error.message)
   }
+
+  const createdFile = Array.isArray(data) ? data[0] : (data as any)
 
   await createFileWorkspace({
     user_id: createdFile.user_id,

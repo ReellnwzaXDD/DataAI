@@ -15,7 +15,6 @@ import { toast } from "sonner"
 import { Input } from "../ui/input"
 import { TextareaAutosize } from "../ui/textarea-autosize"
 import { ChatCommandInput } from "./chat-command-input"
-import { ChatFilesDisplay } from "./chat-files-display"
 import { useChatHandler } from "./chat-hooks/use-chat-handler"
 import { useChatHistoryHandler } from "./chat-hooks/use-chat-history"
 import { usePromptAndCommand } from "./chat-hooks/use-prompt-and-command"
@@ -37,6 +36,8 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     focusAssistant,
     setFocusAssistant,
     userInput,
+    newMessageFiles,
+    chatFiles,
     chatMessages,
     isGenerating,
     selectedPreset,
@@ -52,6 +53,7 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     isFilePickerOpen,
     setFocusFile,
     chatSettings,
+    useRetrieval,
     selectedTools,
     setSelectedTools,
     assistantImages
@@ -85,7 +87,18 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     if (!isTyping && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       setIsPromptPickerOpen(false)
-      handleSendMessage(userInput, chatMessages, false)
+      // Allow sending with files only by synthesizing a minimal query
+      const hasFiles = newMessageFiles.length > 0 || chatFiles.length > 0
+      const fallback =
+        "Answer using the selected files. If no explicit question is given, summarize the most relevant information from the files."
+      const content =
+        userInput && userInput.trim().length > 0
+          ? userInput
+          : hasFiles && useRetrieval
+            ? fallback
+            : ""
+      if (!content) return
+      handleSendMessage(content, chatMessages, false)
     }
 
     // Consolidate conditions to avoid TypeScript error
@@ -165,8 +178,6 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
   return (
     <>
       <div className="flex flex-col flex-wrap justify-center gap-2">
-        <ChatFilesDisplay />
-
         {selectedTools &&
           selectedTools.map((tool, index) => (
             <div
@@ -264,12 +275,22 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
             <IconSend
               className={cn(
                 "bg-primary text-secondary rounded p-1",
-                !userInput && "cursor-not-allowed opacity-50"
+                !(userInput && userInput.trim().length > 0) &&
+                  !(useRetrieval && (newMessageFiles.length > 0 || chatFiles.length > 0)) &&
+                  "cursor-not-allowed opacity-50"
               )}
               onClick={() => {
-                if (!userInput) return
-
-                handleSendMessage(userInput, chatMessages, false)
+                const hasFiles = newMessageFiles.length > 0 || chatFiles.length > 0
+                const fallback =
+                  "Answer using the selected files. If no explicit question is given, summarize the most relevant information from the files."
+                const content =
+                  userInput && userInput.trim().length > 0
+                    ? userInput
+                    : hasFiles && useRetrieval
+                      ? fallback
+                      : ""
+                if (!content) return
+                handleSendMessage(content, chatMessages, false)
               }}
               size={30}
             />

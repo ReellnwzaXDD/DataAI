@@ -26,6 +26,7 @@ export async function POST(req: Request) {
 
     const file_id = formData.get("file_id") as string
     const embeddingsProvider = formData.get("embeddingsProvider") as string
+    let provider: "openai" | "local" = (embeddingsProvider as any) === "openai" ? "openai" : "local"
 
     const { data: fileMetadata, error: metadataError } = await supabaseAdmin
       .from("files")
@@ -54,11 +55,12 @@ export async function POST(req: Request) {
     if (fileError)
       throw new Error(`Failed to retrieve file: ${fileError.message}`)
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const blob = new Blob([fileBuffer])
+    // Use ArrayBuffer directly to avoid Node Buffer type issues in route runtime
+    const arrayBuffer = await file.arrayBuffer()
+    const blob = new Blob([arrayBuffer])
     const fileExtension = fileMetadata.name.split(".").pop()?.toLowerCase()
 
-    if (embeddingsProvider === "openai") {
+    if (provider === "openai") {
       try {
         if (profile.use_azure_openai) {
           checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
@@ -66,10 +68,8 @@ export async function POST(req: Request) {
           checkApiKey(profile.openai_api_key, "OpenAI")
         }
       } catch (error: any) {
-        error.message =
-          error.message +
-          ", make sure it is configured or else use local embeddings"
-        throw error
+        // Fallback to local embeddings when no OpenAI key is configured
+        provider = "local"
       }
     }
 
@@ -100,21 +100,21 @@ export async function POST(req: Request) {
     let embeddings: any = []
 
     let openai
-    if (profile.use_azure_openai) {
+    if (provider === "openai" && profile.use_azure_openai) {
       openai = new OpenAI({
         apiKey: profile.azure_openai_api_key || "",
         baseURL: `${profile.azure_openai_endpoint}/openai/deployments/${profile.azure_openai_embeddings_id}`,
         defaultQuery: { "api-version": "2023-12-01-preview" },
         defaultHeaders: { "api-key": profile.azure_openai_api_key }
       })
-    } else {
+    } else if (provider === "openai") {
       openai = new OpenAI({
         apiKey: profile.openai_api_key || "",
         organization: profile.openai_organization_id
       })
     }
 
-    if (embeddingsProvider === "openai") {
+    if (provider === "openai" && openai) {
       const response = await openai.embeddings.create({
         model: "text-embedding-3-small",
         input: chunks.map(chunk => chunk.content)
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
       embeddings = response.data.map((item: any) => {
         return item.embedding
       })
-    } else if (embeddingsProvider === "local") {
+    } else {
       const embeddingPromises = chunks.map(async chunk => {
         try {
           return await generateLocalEmbedding(chunk.content)
@@ -143,11 +143,11 @@ export async function POST(req: Request) {
       content: chunk.content,
       tokens: chunk.tokens,
       openai_embedding:
-        embeddingsProvider === "openai"
+        provider === "openai"
           ? ((embeddings[index] || null) as any)
           : null,
       local_embedding:
-        embeddingsProvider === "local"
+        provider === "local"
           ? ((embeddings[index] || null) as any)
           : null
     }))

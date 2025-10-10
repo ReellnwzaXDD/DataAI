@@ -24,11 +24,16 @@ export async function POST(req: Request) {
 
     const profile = await getServerProfile()
 
-    if (embeddingsProvider === "openai") {
-      if (profile.use_azure_openai) {
-        checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
-      } else {
-        checkApiKey(profile.openai_api_key, "OpenAI")
+    let provider: "openai" | "local" = embeddingsProvider
+    if (provider === "openai") {
+      try {
+        if (profile.use_azure_openai) {
+          checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
+        } else {
+          checkApiKey(profile.openai_api_key, "OpenAI")
+        }
+      } catch (e) {
+        provider = "local"
       }
     }
 
@@ -47,21 +52,21 @@ export async function POST(req: Request) {
     let embeddings: any = []
 
     let openai
-    if (profile.use_azure_openai) {
+    if (provider === "openai" && profile.use_azure_openai) {
       openai = new OpenAI({
         apiKey: profile.azure_openai_api_key || "",
         baseURL: `${profile.azure_openai_endpoint}/openai/deployments/${profile.azure_openai_embeddings_id}`,
         defaultQuery: { "api-version": "2023-12-01-preview" },
         defaultHeaders: { "api-key": profile.azure_openai_api_key }
       })
-    } else {
+    } else if (provider === "openai") {
       openai = new OpenAI({
         apiKey: profile.openai_api_key || "",
         organization: profile.openai_organization_id
       })
     }
 
-    if (embeddingsProvider === "openai") {
+    if (provider === "openai" && openai) {
       const response = await openai.embeddings.create({
         model: "text-embedding-3-small",
         input: chunks.map(chunk => chunk.content)
@@ -70,7 +75,7 @@ export async function POST(req: Request) {
       embeddings = response.data.map((item: any) => {
         return item.embedding
       })
-    } else if (embeddingsProvider === "local") {
+    } else {
       const embeddingPromises = chunks.map(async chunk => {
         try {
           return await generateLocalEmbedding(chunk.content)
@@ -88,14 +93,8 @@ export async function POST(req: Request) {
       user_id: profile.user_id,
       content: chunk.content,
       tokens: chunk.tokens,
-      openai_embedding:
-        embeddingsProvider === "openai"
-          ? ((embeddings[index] || null) as any)
-          : null,
-      local_embedding:
-        embeddingsProvider === "local"
-          ? ((embeddings[index] || null) as any)
-          : null
+      openai_embedding: provider === "openai" ? ((embeddings[index] || null) as any) : null,
+      local_embedding: provider === "local" ? ((embeddings[index] || null) as any) : null
     }))
 
     await supabaseAdmin.from("file_items").upsert(file_items)

@@ -23,11 +23,16 @@ export async function POST(request: Request) {
 
     const profile = await getServerProfile()
 
-    if (embeddingsProvider === "openai") {
-      if (profile.use_azure_openai) {
-        checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
-      } else {
-        checkApiKey(profile.openai_api_key, "OpenAI")
+    let provider: "openai" | "local" = embeddingsProvider
+    if (provider === "openai") {
+      try {
+        if (profile.use_azure_openai) {
+          checkApiKey(profile.azure_openai_api_key, "Azure OpenAI")
+        } else {
+          checkApiKey(profile.openai_api_key, "OpenAI")
+        }
+      } catch (e) {
+        provider = "local"
       }
     }
 
@@ -48,7 +53,7 @@ export async function POST(request: Request) {
       })
     }
 
-    if (embeddingsProvider === "openai") {
+    if (provider === "openai") {
       const response = await openai.embeddings.create({
         model: "text-embedding-3-small",
         input: userInput
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
       }
 
       chunks = openaiFileItems
-    } else if (embeddingsProvider === "local") {
+    } else {
       const localEmbedding = await generateLocalEmbedding(userInput)
 
       const { data: localFileItems, error: localFileItemsError } =
@@ -89,7 +94,7 @@ export async function POST(request: Request) {
       (a, b) => b.similarity - a.similarity
     )
 
-    return new Response(JSON.stringify({ results: mostSimilarChunks }), {
+    return new Response(JSON.stringify({ results: mostSimilarChunks || [] }), {
       status: 200
     })
   } catch (error: any) {

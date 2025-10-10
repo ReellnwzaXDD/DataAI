@@ -70,13 +70,23 @@ export const handleRetrieval = async (
 
   if (!response.ok) {
     console.error("Error retrieving:", response)
+    // Best-effort: return empty so chat can continue without retrieval
+    try {
+      const data = await response.json()
+      console.error("Retrieval error body:", data)
+    } catch {}
+    return []
   }
 
-  const { results } = (await response.json()) as {
-    results: Tables<"file_items">[]
+  try {
+    const { results } = (await response.json()) as {
+      results: Tables<"file_items">[]
+    }
+    return Array.isArray(results) ? results : []
+  } catch (e) {
+    console.error("Failed to parse retrieval response:", e)
+    return []
   }
-
-  return results
 }
 
 export const createTempMessages = (

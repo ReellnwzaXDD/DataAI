@@ -24,7 +24,7 @@ export const getHomeWorkspaceByUserId = async (userId: string) => {
     default_context_length: 4096,
     default_model: "dataai",
     default_prompt: "You are a friendly, helpful AI assistant.",
-    default_temperature: 0.5,
+    default_temperature: 0.2,
     include_profile_context: true,
     include_workspace_instructions: true,
     instructions: "",
