@@ -15,7 +15,17 @@ _AGENT_BASE_URL = os.getenv("SPELLCHECKER_AGENT_BASE_URL") or os.getenv(
     "AGENT_BASE_URL", "http://192.168.36.44:5001"
 )
 _VALIDATE_PATH = os.getenv("SPELLCHECKER_VALIDATE_PATH", "/spellchecker/validate")
-_REQUEST_TIMEOUT = float(os.getenv("SPELLCHECKER_LLM_TIMEOUT", "45"))
+def _parse_timeout(val: str | None) -> float | None:
+    try:
+        if val is None:
+            return None
+        t = float(val)
+        # Treat <= 0 as no-timeout
+        return None if t <= 0 else t
+    except Exception:
+        return None
+
+_REQUEST_TIMEOUT = _parse_timeout(os.getenv("SPELLCHECKER_LLM_TIMEOUT", "0"))
 _MAX_BATCH = int(os.getenv("SPELLCHECKER_LLM_BATCH", "6"))
 _CANDIDATE_LIMIT = int(os.getenv("LLM_TRIM_LIMIT", "5"))
 
@@ -137,7 +147,10 @@ def cheap_gate(context: str, candidates: Sequence[dict]) -> Tuple[List[dict], Li
 def _post(endpoint: str, payload: dict) -> dict:
     url = _build_url(endpoint)
     try:
-        response = _session.post(url, json=payload, timeout=_REQUEST_TIMEOUT)
+        kwargs = {"json": payload}
+        if _REQUEST_TIMEOUT is not None:
+            kwargs["timeout"] = _REQUEST_TIMEOUT
+        response = _session.post(url, **kwargs)
         response.raise_for_status()
         return response.json()
     except Exception as exc:

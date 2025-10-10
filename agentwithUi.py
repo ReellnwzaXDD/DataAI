@@ -943,7 +943,11 @@ def _sc_llm_decide(context: str, candidates: list[dict]) -> dict:
     t = threading.Thread(target=_invoke, args=(q,), daemon=True)
     t.start()
     try:
-        content = q.get(timeout=SC_LLM_TIMEOUT)
+        if SC_LLM_TIMEOUT and SC_LLM_TIMEOUT > 0:
+            content = q.get(timeout=SC_LLM_TIMEOUT)
+        else:
+            # Wait indefinitely when timeout <= 0 (user requested no timeout)
+            content = q.get()
     except Exception:
         content = None
     if not content:
@@ -952,8 +956,10 @@ def _sc_llm_decide(context: str, candidates: list[dict]) -> dict:
         return {"apply": apply, "reject": reject}
 
     parsed = _extract_first_json(content) or {}
-    apply_objs = _to_objects(parsed.get('apply', []), candidates)
-    reject_objs = _to_objects(parsed.get('reject', []), candidates)
+    # Map indices against exactly the candidate list shown to the model
+    shown = cand_for_prompt
+    apply_objs = _to_objects(parsed.get('apply', []), shown)
+    reject_objs = _to_objects(parsed.get('reject', []), shown)
 
     seen = {(c['orig'], c['corr']) for c in apply_objs}
     for c in candidates:
