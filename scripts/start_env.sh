@@ -353,7 +353,7 @@ ensure_frontend_env() {
     fi
   fi
 
-  local openai_base="${OPENAI_API_BASE_URL:-http://localhost:5000/v1}"
+  local openai_base="${OPENAI_API_BASE_URL:-http://localhost:5001/v1}"
   local openai_key="${OPENAI_API_KEY:-local-placeholder}"
 
   case "$SUPABASE_MODE" in
@@ -545,7 +545,7 @@ start_backend() {
     python3 gradio_app.py
   else
     export BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
-    export BACKEND_PORT="${BACKEND_PORT:-5000}"
+    export BACKEND_PORT="${BACKEND_PORT:-5001}"
     python3 agentwithUi.py
   fi
 }

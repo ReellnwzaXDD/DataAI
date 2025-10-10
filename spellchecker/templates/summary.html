@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Review Corrections</title>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.8/mammoth.browser.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    h1 { text-align: center; }
+    .preview {
+      border: 1px solid #ccc;
+      padding: 1rem;
+      max-height: 500px;
+      overflow: auto;
+      scroll-behavior: smooth;
+      margin-bottom: 2rem;
+    }
+    .preview-occurrence.focused { background-color: yellow; }
+
+    .suggestion {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    .suggestion.hidden { display: none; }
+    .suggestion > label { display: flex; align-items: center; gap: 0.5rem; }
+    .suggestion details { margin-top: 0.5rem; }
+
+    .mark-keyword {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+    }
+
+    .pagination {
+      text-align: center;
+      margin: 1rem 0;
+    }
+    .pagination button {
+      margin: 0 .25rem;
+      padding: .5rem .75rem;
+      cursor: pointer;
+    }
+    .pagination button.active {
+      font-weight: bold;
+      text-decoration: underline;
+    }
+
+    .actions { text-align: center; margin-top: 2rem; }
+    .actions button { margin: 0 0.5rem; padding: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Document Preview &amp; Corrections</h1>
+  <p style="text-align:center; margin-top:-0.5rem; display:flex; gap:1rem; justify-content:center;">
+    <a href="/keywords/" target="_blank">Manage Keywords (คำเฉพาะ)</a>
+    <a href="/kg/view" target="_blank">Knowledge Graph View</a>
+    <a href="/kg/" target="_blank">Knowledge Graph Editor</a>
+  </p>
+
+  <!-- Mammoth preview -->
+  <div id="doc-preview" class="preview">Loading preview…</div>
+
+  <form action="/apply/" method="post">
+    <input type="hidden" name="filename"     value="{{ filename }}">
+    <input type="hidden" name="basename"      value="{{ basename }}">
+
+    <!-- Suggestions list -->
+    <div id="suggestions-container">
+      {% for orig, corr, lang, contexts in suggestions %}
+      <div class="suggestion" data-index="{{ loop.index0 }}" id="sugg-{{ loop.index0 }}">
+        <!-- Top‐level checkbox + replacement field -->
+        <label>
+          <input type="checkbox"
+                 name="apply_{{ loop.index }}"
+                 value="1"
+                 checked>
+          <strong>{{ orig }}</strong> →
+          <input type="text"
+                 name="repl_{{ loop.index }}"
+                 value="{{ corr }}">
+        </label>
+
+        <!-- Mark as Keyword (คำเฉพาะ) -->
+        <div class="mark-keyword">
+          <button type="button" class="mark-keyword-btn" data-word="{{ orig }}" data-lang="{{ lang }}">คำเฉพาะ</button>
+        </div>
+
+        <!-- Context‐level checkboxes -->
+        <details>
+          <summary>
+            {{ contexts|length }} occurrence{{ contexts|length > 1 and 's' or '' }}
+          </summary>
+          <ul>
+            {% for ctx in contexts %}
+            <li style="display: flex; align-items: center; gap: 0.5rem;">
+              <label>
+                <input type="checkbox"
+                       name="ctx_{{ loop.index }}_{{ loop.index0 + 1 }}"
+                       value="{{ ctx|e }}"
+                       checked>
+                <span>{{ ctx }}</span>
+              </label>
+              <button type="button"
+                      class="locate-btn"
+                      data-word="{{ orig }}"
+                      data-ctxstr="{{ ctx|e }}">🔍</button>
+            </li>
+            {% endfor %}
+          </ul>
+        </details>
+
+        <!-- Hidden original value -->
+        <input type="hidden"
+               name="orig_{{ loop.index }}"
+               value="{{ orig }}">
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Pagination controls at bottom -->
+    <div id="pagination-bottom" class="pagination"></div>
+
+    <div class="actions">
+      <button type="submit">Apply Selected &amp; Download</button>
+      <button type="button" onclick="skipAll()">Skip All</button>
+    </div>
+  </form>
+
+  <script>
+  (function(){
+    /*** Pagination & Preview Setup (unchanged) ***/
+    const PREVIEW = document.getElementById('doc-preview');
+    const SUGG_CONTAINER = document.getElementById('suggestions-container');
+    const SUGGESTIONS = Array.from(SUGG_CONTAINER.querySelectorAll('.suggestion'));
+    const PER_PAGE = 10;
+    let currentPage = 1;
+    const totalPages = Math.ceil(SUGGESTIONS.length / PER_PAGE);
+
+    function renderPage(page) {
+      currentPage = page;
+      const start = (page - 1) * PER_PAGE;
+      const end = start + PER_PAGE;
+      SUGGESTIONS.forEach((el, idx) => {
+        el.classList.toggle('hidden', idx < start || idx >= end);
+      });
+      renderPagination();
+    }
+    function renderPagination() {
+      [ 'bottom' ].forEach(pos => {
+        const container = document.getElementById(`pagination-${pos}`);
+        container.innerHTML = '';
+        const prev = document.createElement('button');
+        prev.textContent = '‹ Prev';
+        prev.disabled = (currentPage === 1);
+        prev.onclick = () => renderPage(currentPage - 1);
+        container.appendChild(prev);
+        for (let p = 1; p <= totalPages; p++) {
+          const btn = document.createElement('button');
+          btn.textContent = p;
+          if (p === currentPage) btn.classList.add('active');
+          btn.onclick = () => renderPage(p);
+          container.appendChild(btn);
+        }
+        const next = document.createElement('button');
+        next.textContent = 'Next ›';
+        next.disabled = (currentPage === totalPages);
+        next.onclick = () => renderPage(currentPage + 1);
+        container.appendChild(next);
+      });
+    }
+
+    fetch(`/uploads/{{ basename|urlencode }}`)
+      .then(r => r.arrayBuffer())
+      .then(buf => mammoth.convertToHtml({ arrayBuffer: buf }))
+      .then(res => {
+        PREVIEW.innerHTML = res.value;
+        const words = Array.from(new Set(
+          Array.from(document.querySelectorAll('.locate-btn'))
+               .map(b=>b.dataset.word)
+        ));
+        words.forEach(w => wrapOccurrences(PREVIEW, w));
+        attachLocateHandlers();
+        renderPage(1);
+      })
+      .catch(() => { PREVIEW.textContent = 'Failed to load preview.'; });
+
+    function escapeRegExp(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    function wrapOccurrences(container, word) {
+      const re = new RegExp(escapeRegExp(word), 'gi');
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node, count = 0, nodes = [];
+      while (node = walker.nextNode()) nodes.push(node);
+      nodes.forEach(t => {
+        if (!re.test(t.nodeValue)) return;
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        t.nodeValue.replace(re, (match, off) => {
+          frag.appendChild(document.createTextNode(t.nodeValue.slice(last, off)));
+          const span = document.createElement('span');
+          span.className = 'preview-occurrence';
+          span.dataset.word = word;
+          span.dataset.ctx  = ++count;
+          span.textContent = match;
+          frag.appendChild(span);
+          last = off + match.length;
+        });
+        frag.appendChild(document.createTextNode(t.nodeValue.slice(last)));
+        t.parentNode.replaceChild(frag, t);
+      });
+    }
+    function attachLocateHandlers() {
+      function normalize(s){ return (s||'').toString().replace(/\s+/g,' ').trim().toLowerCase(); }
+      function nearestBlock(el){
+        let n = el;
+        while (n && n !== PREVIEW){
+          if (n.nodeType === 1 && /^(P|DIV|LI|TD|TH|H1|H2|H3|H4|H5|H6)$/i.test(n.tagName)) return n;
+          n = n.parentNode;
+        }
+        return PREVIEW;
+      }
+      document.querySelectorAll('.locate-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const w = btn.dataset.word;
+          const ctxStr = btn.dataset.ctxstr || '';
+          PREVIEW.querySelectorAll('.preview-occurrence.focused')
+                 .forEach(el=>el.classList.remove('focused'));
+          const occs = Array.from(PREVIEW.querySelectorAll('.preview-occurrence'))
+                            .filter(el => el.dataset.word === w);
+          const normCtx = normalize(ctxStr);
+          let target = null;
+          for (const el of occs){
+            const blk = nearestBlock(el);
+            const txt = normalize(blk.textContent);
+            if (!normCtx || txt.includes(normCtx)) { target = el; break; }
+          }
+          if (!target) target = occs[0];
+          if (target) { target.classList.add('focused'); target.scrollIntoView({behavior:'smooth',block:'center'}); }
+        });
+      });
+    }
+
+    // Skip‐All helper
+    window.skipAll = () => {
+      document.querySelectorAll(
+        'input[type=checkbox][name^="apply_"], input[type=checkbox][name^="ctx_"]'
+      ).forEach(cb=>cb.checked=false);
+      document.forms[0].submit();
+    };
+
+    // Mark keyword from summary page
+    document.querySelectorAll('.mark-keyword-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const word = btn.dataset.word;
+        const lang = btn.dataset.lang;
+        const fd = new FormData();
+        fd.append('term', word);
+        fd.append('lang', lang);
+        const res = await fetch('/keywords/mark', { method: 'POST', body: fd });
+        if (!res.ok) return alert('Failed to mark keyword');
+        const data = await res.json();
+        // Toggle UI: if added, hide suggestion; if removed, change label back
+        const parent = document.querySelector(`#sugg-${btn.closest('.suggestion').dataset.index}`);
+        if (data.action === 'added') {
+          parent.classList.add('hidden');
+        } else if (data.action === 'removed') {
+          btn.textContent = 'คำเฉพาะ';
+        }
+      });
+    });
+
+  })();
+  </script>
+</body>
+</html>

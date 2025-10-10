@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Cache Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1.5rem; }
+    .stat { margin: .5rem 0; }
+    button { padding: .4rem .7rem; margin-right: .5rem; }
+  </style>
+</head>
+<body>
+  <p><a href="/">← Back</a></p>
+  <h2>Cache Dashboard</h2>
+  {% if not enabled %}
+    <p>Redis not enabled. Set <code>REDIS_URL</code> to use caching.</p>
+  {% else %}
+    <div class="stat">LLM decisions: <strong>{{ llmdec }}</strong></div>
+    <div class="stat">Document results: <strong>{{ docres }}</strong></div>
+    <form method="post" action="/cache/purge_llm" style="display:inline" onsubmit="return confirm('Purge all LLM decision cache?')">
+      <button type="submit">Purge LLM Cache</button>
+    </form>
+    <form method="post" action="/cache/purge_all" style="display:inline" onsubmit="return confirm('Purge all caches?')">
+      <button type="submit">Purge ALL</button>
+    </form>
+  {% endif %}
+</body>
+</html>
+

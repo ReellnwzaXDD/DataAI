@@ -12,6 +12,17 @@ UI_MODE="${UI_MODE:-flask}"            # flask | gradio
 START_FRONTEND="${START_FRONTEND:-1}"  # 1 to run Next.js dev server too
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
+install_python_requirements() {
+  if [[ -f "$PROJECT_ROOT/requirements.txt" ]] && command -v python3 >/dev/null 2>&1; then
+    if python3 -m pip --version >/dev/null 2>&1; then
+      echo "[manual] Installing Python dependencies from requirements.txt..."
+      python3 -m pip install --upgrade pip >/dev/null 2>&1 || true
+      python3 -m pip install -r "$PROJECT_ROOT/requirements.txt"
+    else
+      echo "[manual] pip not found; skipping Python dependency installation." >&2
+    fi
+  fi
+}
 put_kv() {
   # put_kv <file> <KEY> <VALUE>
   local file="$1" key="$2" val="$3"
@@ -165,7 +176,7 @@ start_backend() {
     python3 gradio_app.py
   else
     export BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
-    export BACKEND_PORT="${BACKEND_PORT:-5000}"
+    export BACKEND_PORT="${BACKEND_PORT:-5001}"
     python3 agentwithUi.py
   fi
 }
@@ -184,6 +195,12 @@ CLEAN_TEXT="$(run_supabase_and_capture)"
 
 apply_env_to_next_from_text "$CLEAN_TEXT"
 
+# Ensure spellchecker URL present in frontend env
+ensure_env_file
+# If SUPABASE_EXTERNAL_HOST is provided (e.g., via start_with_proxy.sh), prefer it for public URL
+DEFAULT_SPELLCHECKER_URL="http://${SUPABASE_EXTERNAL_HOST:-127.0.0.1}:8000"
+put_kv "$ENV_FILE" "NEXT_PUBLIC_SPELLCHECKER_URL" "${NEXT_PUBLIC_SPELLCHECKER_URL:-$DEFAULT_SPELLCHECKER_URL}"
+
 # Export .env.local into current shell (optional; backend may read env directly)
 set -a
 # shellcheck disable=SC1091
@@ -197,11 +214,22 @@ if [[ -n "${SUPABASE_EXTERNAL_HOST:-}" ]]; then
   echo "  DB:     postgresql://postgres:postgres@${SUPABASE_EXTERNAL_HOST}:54322/postgres"
 else
   echo "  Studio: http://127.0.0.1:54323"
-  echo "  DB:     postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+echo "  DB:     postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 fi
 
+echo "[manual] ensuring Python dependencies..."
+install_python_requirements
+ 
 echo "[manual] starting backend..."
 start_backend & BACKEND_PID=$!
+
+echo "[manual] starting spellchecker..."
+SPELLCHECKER_HOST="${SPELLCHECKER_HOST:-0.0.0.0}"
+SPELLCHECKER_PORT="${SPELLCHECKER_PORT:-8000}"
+# Make spellchecker LLM runner call the backend on the externally-reachable host
+# so that 192.168.36.44 is used when available (e.g., via start_with_proxy.sh)
+export SPELLCHECKER_AGENT_BASE_URL="${SPELLCHECKER_AGENT_BASE_URL:-http://${SUPABASE_EXTERNAL_HOST:-192.168.36.44}:${BACKEND_PORT:-5001}}"
+python3 -m uvicorn spellchecker.main:app --host "$SPELLCHECKER_HOST" --port "$SPELLCHECKER_PORT" & SPELLCHECKER_PID=$!
 
 if [[ "${START_FRONTEND}" == "1" ]]; then
   echo "[manual] starting frontend..."
@@ -209,11 +237,13 @@ if [[ "${START_FRONTEND}" == "1" ]]; then
 fi
 
 echo "Backend PID: ${BACKEND_PID:-}"
+echo "Spellchecker PID: ${SPELLCHECKER_PID:-}"
 echo "Frontend PID: ${FRONTEND_PID:-}"
 
 cleanup() {
   [[ -n "${FRONTEND_PID:-}" ]] && kill "${FRONTEND_PID}" 2>/dev/null || true
   [[ -n "${BACKEND_PID:-}" ]] && kill "${BACKEND_PID}" 2>/dev/null || true
+  [[ -n "${SPELLCHECKER_PID:-}" ]] && kill "${SPELLCHECKER_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

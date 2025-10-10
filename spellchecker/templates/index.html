@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Data Check or maybe gen3.0</title>
+  <!-- Font Awesome for the file icon -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  >
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    h1 { text-align: center; }
+    .drop-zone {
+      position: relative;
+      border: 2px dashed #888;
+      border-radius: 6px;
+      padding: 40px;
+      text-align: center;
+      transition: background-color 0.3s, border-color 0.3s;
+      cursor: pointer;
+      color: #555;
+      margin: 1rem auto;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .drop-zone.dragover {
+      background-color: #eef;
+      border-color: #448;
+    }
+    .file-icon {
+      display: none;
+      font-size: 4rem;
+      color: #2b579a;
+      margin-bottom: 0.5rem;
+    }
+    #drop-text { margin: 0; }
+    .file-name {
+      display: none;
+      margin-top: 0.5rem;
+      padding: 0.3rem 0.8rem;
+      border: 1px solid #2b579a;
+      border-radius: 12px;
+      background: #f0f8ff;
+      color: #2b579a;
+      white-space: nowrap;
+    }
+    #upload-spinner {
+      display: none;
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 1.5rem;
+      color: #555;
+    }
+    form.uploading #upload-spinner { display: block; }
+
+    /* Delete/Clear button */
+    #clear-file {
+      display: none;
+      margin-top: 0.5rem;
+      padding: 0.3rem 0.6rem;
+      background: #c00;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    button[type="submit"] {
+      display: block;
+      margin: 1rem auto;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Upload .docx for Spell-Checking </h1>
+  <p style="text-align:center; margin-top:-0.5rem; display:flex; gap:1rem; justify-content:center;">
+    <a href="/keywords/">Manage Keywords (คำเฉพาะ)</a>
+    <a href="/kg/view" target="_blank">Knowledge Graph View</a>
+    <a href="/kg/" target="_blank">Knowledge Graph Editor</a>
+  </p>
+
+  <form id="upload-form" action="/upload/" method="post" enctype="multipart/form-data">
+    <!-- Spinner -->
+    <i id="upload-spinner" class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+
+    <!-- Hidden file input (single file only) -->
+    <input
+      id="file-input"
+      type="file"
+      name="file"
+      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      style="display:none"
+      required
+    >
+
+    <!-- Drop zone -->
+    <div id="drop-zone" class="drop-zone">
+      <i class="fas fa-file-word file-icon" aria-hidden="true"></i>
+      <p id="drop-text">Drag &amp; drop your .docx file here,<br>or click this box to select</p>
+      <div id="file-name" class="file-name"></div>
+      <!-- Clear button -->
+      <button type="button" id="clear-file">Delete File</button>
+    </div>
+
+    <div id="progress-wrap" style="display:none; max-width:500px; margin: 0.5rem auto;">
+      <div style="height: 8px; background:#eee; border-radius: 4px; overflow:hidden;">
+        <div id="progress-bar" style="height:100%; width:0%; background:#2b579a;"></div>
+      </div>
+      <div id="progress-text" style="font-size:0.9rem; color:#555; text-align:center; margin-top:4px;">0%</div>
+    </div>
+
+    <button id="submit-btn" type="submit">Upload and Check Spelling</button>
+  </form>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const dropZone    = document.getElementById("drop-zone");
+      const fileInput   = document.getElementById("file-input");
+      const form        = document.getElementById("upload-form");
+      const dropText    = document.getElementById("drop-text");
+      const fileIcon    = document.querySelector(".file-icon");
+      const fileNameDiv = document.getElementById("file-name");
+      const clearBtn    = document.getElementById("clear-file");
+
+      // Prevent multiple files
+      fileInput.multiple = false;
+
+      // Open file dialog on click
+      dropZone.addEventListener("click", () => fileInput.click());
+
+      // Prevent defaults on drag events
+      ["dragenter","dragover","dragleave","drop"].forEach(evt => {
+        dropZone.addEventListener(evt, e => e.preventDefault());
+        document.body.addEventListener(evt, e => e.preventDefault());
+      });
+
+      // Highlight on dragover
+      dropZone.addEventListener("dragover", () => dropZone.classList.add("dragover"));
+      dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+
+      // Reset drop zone to initial state
+      function resetDropZone() {
+        fileInput.value = "";                 // clear the FileList
+        dropText.style.display    = "block";
+        fileIcon.style.display    = "none";
+        fileNameDiv.style.display = "none";
+        clearBtn.style.display     = "none";
+      }
+
+      // Clear button handler
+      clearBtn.addEventListener("click", resetDropZone);
+
+      // Shared handler for both drop and manual select
+      function handleFile(file) {
+        if (!file.name.toLowerCase().endsWith(".docx")) {
+          alert("Please upload a .docx file.");
+          return;
+        }
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+
+        dropText.style.display    = "none";
+        fileIcon.style.display    = "block";
+        fileNameDiv.textContent   = file.name;
+        fileNameDiv.style.display = "block";
+        clearBtn.style.display    = "block";
+      }
+
+      // Drop event
+      dropZone.addEventListener("drop", e => {
+        dropZone.classList.remove("dragover");
+        const files = e.dataTransfer.files;
+        if (files.length) handleFile(files[0]);
+      });
+
+      // File-picker change
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) handleFile(fileInput.files[0]);
+      });
+
+      // XHR submit with upload progress
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (!fileInput.files.length) { alert('Please choose a .docx first.'); return; }
+        form.classList.add("uploading");
+        const submitBtn = document.getElementById('submit-btn');
+        const pw = document.getElementById('progress-wrap');
+        const pb = document.getElementById('progress-bar');
+        const pt = document.getElementById('progress-text');
+        pw.style.display = 'block';
+        submitBtn.disabled = true;
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+        xhr.responseType = 'text';
+        xhr.upload.onprogress = function (ev) {
+          if (ev.lengthComputable) {
+            const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
+            pb.style.width = pct + '%';
+            pt.textContent = pct + '%';
+          }
+        };
+        xhr.onload = function () {
+          // Fill bar to 100%
+          pb.style.width = '100%';
+          pt.textContent = 'Processing...';
+          if (xhr.status >= 200 && xhr.status < 300) {
+            // Replace document with server-rendered response
+            document.open();
+            document.write(xhr.responseText);
+            document.close();
+          } else {
+            alert('Upload failed: ' + xhr.status);
+            submitBtn.disabled = false;
+            form.classList.remove('uploading');
+          }
+        };
+        xhr.onerror = function () {
+          alert('Network error during upload.');
+          submitBtn.disabled = false;
+          form.classList.remove('uploading');
+        };
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        xhr.send(fd);
+      });
+    });
+  </script>
+</body>
+</html>

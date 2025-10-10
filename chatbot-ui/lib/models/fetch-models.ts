@@ -4,9 +4,14 @@ import { toast } from "sonner"
 import { LLM_LIST } from "./llm/llm-list"
 import { VALID_ENV_KEYS } from "@/types/valid-keys"
 
-export const fetchHostedModels = async (_profile: Tables<"profiles">) => {
+export const fetchHostedModels = async (
+  _profile: Tables<"profiles">
+): Promise<{ envKeyMap: Record<string, VALID_ENV_KEYS>; hostedModels: LLM[] }> => {
   return {
-    envKeyMap: { openai: VALID_ENV_KEYS.OPENAI_API_KEY },
+    envKeyMap: {
+      openai: VALID_ENV_KEYS.OPENAI_API_KEY,
+      openrouter: VALID_ENV_KEYS.OPENROUTER_API_KEY
+    },
     hostedModels: LLM_LIST
   }
 }

@@ -3,6 +3,7 @@ import { ChatbotUIContext } from "@/context/context"
 import { IconInfoCircle, IconMessagePlus } from "@tabler/icons-react"
 import { FC, useContext } from "react"
 import { WithTooltip } from "../ui/with-tooltip"
+import { SpellcheckerLink } from "../utility/spellchecker-link"
 
 interface ChatSecondaryButtonsProps {}
 
@@ -15,6 +16,7 @@ export const ChatSecondaryButtons: FC<ChatSecondaryButtonsProps> = ({}) => {
     <>
       {selectedChat && (
         <>
+          <SpellcheckerLink />
           <WithTooltip
             delayDuration={200}
             display={

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Knowledge Graph Editor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    textarea { width: 100%; height: 400px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .row { display: flex; gap: 1rem; margin-top: 1rem; }
+    .row form { display: inline; }
+    .msg { margin-top: .5rem; color: green; }
+    .err { margin-top: .5rem; color: red; }
+    .nav { margin-bottom: 1rem; }
+  </style>
+  <script>
+    function validateJSON() {
+      const txt = document.getElementById('kg-json').value;
+      try { JSON.parse(txt); alert('Valid JSON ✓'); } catch (e) { alert('Invalid JSON: ' + e); }
+    }
+  </script>
+  </head>
+<body>
+  <div class="nav"><a href="/">← Back</a> | <a href="/keywords/" target="_blank">Keywords</a></div>
+  <h1>Knowledge Graph</h1>
+  <p>Edit JSON structure with keys <code>nodes</code> (array of strings) and <code>edges</code> (array of [source, target]).</p>
+
+  {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/kg/save">
+    <textarea id="kg-json" name="data">{{ json_text }}</textarea>
+    <div class="row">
+      <button type="button" onclick="validateJSON()">Validate</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+
+  <form method="post" action="/kg/reset" style="margin-top:1rem">
+    <button type="submit">Reset from Keywords</button>
+  </form>
+</body>
+</html>
+

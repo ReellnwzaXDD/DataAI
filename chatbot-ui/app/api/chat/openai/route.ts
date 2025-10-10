@@ -2,7 +2,7 @@ import { ChatSettings } from "@/types"
 import { ServerRuntime } from "next"
 import { StreamingTextResponse } from "ai"
 
-const DEFAULT_BASE_URL = "http://localhost:5000/v1"
+const DEFAULT_BASE_URL = "http://localhost:5001/v1"
 
 const trimTrailingSlashes = (path: string) => {
   let result = path

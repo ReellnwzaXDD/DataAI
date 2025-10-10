@@ -29,7 +29,7 @@ export const getHomeWorkspaceByUserId = async (userId: string) => {
     include_workspace_instructions: true,
     instructions: "",
     is_home: true,
-    embeddings_provider: "openai",
+    embeddings_provider: "local",
     sharing: "private"
   }
 

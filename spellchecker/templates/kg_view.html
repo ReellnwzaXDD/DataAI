@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Knowledge Graph View</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 1rem; }
+    .layout { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; }
+    #graph { border: 1px solid #ccc; width: 100%; height: 600px; }
+    .node circle { fill: #69b3a2; cursor: pointer; }
+    .node text { font-size: 12px; pointer-events: none; }
+    .link { stroke: #999; stroke-opacity: 0.6; }
+    .panel { margin-bottom: 0.5rem; }
+    #list { border: 1px solid #ddd; padding: .5rem; border-radius: 4px; height: 600px; overflow: auto; }
+    .group { margin-bottom: .5rem; }
+    .group h4 { margin: .25rem 0; border-bottom: 1px solid #eee; padding-bottom: .15rem; font-size: 13px; color:#444; }
+    .item { font-size: 13px; padding: 2px 0; cursor: pointer; }
+    .search { width: 100%; box-sizing: border-box; margin-bottom: .5rem; padding: 4px 6px; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <a href="/">← Back</a> | <a href="/kg/" target="_blank">Edit KG JSON</a>
+  </div>
+  <h2>Knowledge Graph</h2>
+  <div class="layout">
+    <div id="list">
+      <input id="filter" class="search" placeholder="Filter nodes..." />
+      <div id="groups"></div>
+    </div>
+    <div id="graph"></div>
+  </div>
+  <script>
+    fetch('/kg/data').then(r=>r.json()).then(data => {
+      if (!data.ok) { document.getElementById('graph').textContent = 'Failed to load KG'; return; }
+      const nodes = data.nodes.map((id,i)=>({ id, index:i }));
+      const idToNode = new Map(nodes.map(n=>[n.id,n]));
+      const links = (data.edges||[]).map(([s,t])=>({ source: idToNode.get(s), target: idToNode.get(t) }));
+
+      const div = document.getElementById('graph');
+      const width = div.clientWidth; const height = div.clientHeight;
+      const svg = d3.select('#graph').append('svg').attr('width', width).attr('height', height);
+      const g = svg.append('g');
+
+      const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d=>d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-120))
+        .force('center', d3.forceCenter(width/2, height/2));
+
+      const link = g.append('g').attr('class','links').selectAll('line')
+        .data(links).enter().append('line').attr('class','link');
+
+      const node = g.append('g').attr('class','nodes').selectAll('g')
+        .data(nodes).enter().append('g').attr('class','node');
+
+      node.append('circle').attr('r', 6).call(d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended));
+
+      node.append('text').attr('x', 8).attr('y', 3).text(d=>d.id);
+
+      simulation.on('tick', () => {
+        link.attr('x1', d=>d.source.x).attr('y1', d=>d.source.y)
+            .attr('x2', d=>d.target.x).attr('y2', d=>d.target.y);
+        node.attr('transform', d=>`translate(${d.x},${d.y})`);
+      });
+
+      // Zoom & pan
+      const zoom = d3.zoom().scaleExtent([0.25, 4]).on('zoom', (ev) => {
+        g.attr('transform', ev.transform);
+      });
+      svg.call(zoom);
+
+      function dragstarted(event, d){ if(!event.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; }
+      function dragged(event, d){ d.fx=event.x; d.fy=event.y; }
+      function dragended(event, d){ if(!event.active) simulation.alphaTarget(0); d.fx=null; d.fy=null; }
+      // Build A–Z grouped list with case-insensitive grouping
+      const groupsDiv = document.getElementById('groups');
+      const filterInput = document.getElementById('filter');
+      function normKey(s){ return (s||'').toLocaleLowerCase(); }
+      function firstKey(s){ const c = (s||'')[0]||'#'; const U=c.toUpperCase(); return /[A-Z]/.test(U)?U:'#'; }
+      function renderList(){
+        const q = normKey(filterInput.value||'');
+        const seen = new Set();
+        const pool = nodes.map(n=>n.id).filter(id=>!q || normKey(id).includes(q));
+        pool.sort((a,b)=> a.localeCompare(b, undefined, {sensitivity:'base'}));
+        const buckets = new Map();
+        for(const id of pool){
+          const key = normKey(id);
+          if(seen.has(key)) continue; // collapse same words (case-insensitive)
+          seen.add(key);
+          const g = firstKey(id);
+          if(!buckets.has(g)) buckets.set(g, []);
+          buckets.get(g).push(id);
+        }
+        // render
+        groupsDiv.innerHTML = '';
+        const letters = Array.from(buckets.keys()).sort();
+        for(const L of letters){
+          const gDiv = document.createElement('div'); gDiv.className='group';
+          const h = document.createElement('h4'); h.textContent = L; gDiv.appendChild(h);
+          for(const id of buckets.get(L)){
+            const row = document.createElement('div'); row.className='item'; row.textContent = id;
+            row.onclick = () => {
+              const n = idToNode.get(id);
+              if(!n) return;
+              // Nudge simulation focus
+              simulation.alphaTarget(0.2).restart();
+              n.fx = n.x; n.fy = n.y;
+              setTimeout(()=>{ n.fx=null; n.fy=null; simulation.alphaTarget(0); }, 400);
+            };
+            gDiv.appendChild(row);
+          }
+          groupsDiv.appendChild(gDiv);
+        }
+      }
+      filterInput.addEventListener('input', renderList);
+      renderList();
+    }).catch(()=>{ document.getElementById('graph').textContent='Error loading KG'; });
+  </script>
+</body>
+</html>

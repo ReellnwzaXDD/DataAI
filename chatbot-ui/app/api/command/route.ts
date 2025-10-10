@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = "http://localhost:5000/v1"
+const DEFAULT_BASE_URL = "http://localhost:5001/v1"
 
 const trimBase = (base: string) => {
   try {
